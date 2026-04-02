@@ -1,32 +1,53 @@
+import json
 from datetime import datetime
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .config import settings
 from .models import Trip
 from .schemas import TripAssignRequest, TripCreate, TripResponse, TripStatusUpdate
+
+
+def _load_seed_trips() -> list[dict]:
+    seed_path = Path(settings.seed_data_file)
+    if not seed_path.exists():
+        return []
+    try:
+        data = json.loads(seed_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    return data.get("dispatch", {}).get("trips", [])
 
 
 def seed_trips(db: Session) -> None:
     if db.scalar(select(Trip).limit(1)):
         return
 
-    now = datetime.now()
-    seed = Trip(
-        id="trip-1",
-        client_id="c1",
-        client_name="Aria Montgomery",
-        origin="Main St 123",
-        destination="7th Ave 90",
-        distance="8.4 km",
-        status="Pending",
-        tow_truck="Unassigned",
-        date=now.strftime("%Y-%m-%d"),
-        time=now.strftime("%H:%M"),
+    trips = _load_seed_trips()
+    if not trips:
+        return
+
+    db.add_all(
+        [
+            Trip(
+                id=t["id"],
+                client_id=t["client_id"],
+                client_name=t["client_name"],
+                origin=t["origin"],
+                destination=t["destination"],
+                distance=t.get("distance", "0 km"),
+                status=t.get("status", "Pending"),
+                tow_truck=t.get("tow_truck", "Unassigned"),
+                date=t["date"],
+                time=t["time"],
+            )
+            for t in trips
+        ]
     )
-    db.add(seed)
     db.commit()
 
 

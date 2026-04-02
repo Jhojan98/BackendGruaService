@@ -44,6 +44,11 @@ def fleet_list(db: Annotated[Session, Depends(get_db)]) -> list[TruckResponse]:
     return list_fleet(db)
 
 
+@app.get("/internal/fleet/locations", response_model=list[LocationResponse])
+def fleet_locations(db: Annotated[Session, Depends(get_db)]) -> list[LocationResponse]:
+    return list_locations(db)
+
+
 @app.get("/internal/fleet/{truck_id}", response_model=TruckResponse)
 def get_truck(truck_id: str, db: Annotated[Session, Depends(get_db)]) -> TruckResponse:
     return to_truck_response(get_truck_or_404(truck_id, db))
@@ -56,11 +61,6 @@ def update_truck_status(
     db: Annotated[Session, Depends(get_db)],
 ) -> TruckResponse:
     return update_status(truck_id, payload.status, db)
-
-
-@app.get("/internal/fleet/locations", response_model=list[LocationResponse])
-def fleet_locations(db: Annotated[Session, Depends(get_db)]) -> list[LocationResponse]:
-    return list_locations(db)
 
 
 @app.websocket("/ws/locations")

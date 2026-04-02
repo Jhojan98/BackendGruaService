@@ -1,42 +1,47 @@
+import json
+from pathlib import Path
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .config import settings
 from .models import User
 from .schemas import LoginRequest
 from .security import create_access_token, pwd_context
 
 
-def seed_users(db: Session) -> None:
-    admin = db.scalar(select(User).where(User.email == "admin@terra.local"))
-    if not admin:
-        admin = User(
-            id="u-admin-1",
-            email="admin@terra.local",
-            full_name="Terra Admin",
-            role="admin",
-            password_hash=pwd_context.hash("admin123"),
-        )
-        db.add(admin)
-    else:
-        admin.full_name = "Terra Admin"
-        admin.role = "admin"
-        admin.password_hash = pwd_context.hash("admin123")
+def _load_seed_users() -> list[dict]:
+    seed_path = Path(settings.seed_data_file)
+    if not seed_path.exists():
+        return []
+    try:
+        data = json.loads(seed_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    return data.get("auth", {}).get("users", [])
 
-    dispatcher = db.scalar(select(User).where(User.email == "dispatcher@terra.local"))
-    if not dispatcher:
-        dispatcher = User(
-            id="u-dispatch-1",
-            email="dispatcher@terra.local",
-            full_name="Dispatch Operator",
-            role="dispatcher",
-            password_hash=pwd_context.hash("dispatch123"),
-        )
-        db.add(dispatcher)
-    else:
-        dispatcher.full_name = "Dispatch Operator"
-        dispatcher.role = "dispatcher"
-        dispatcher.password_hash = pwd_context.hash("dispatch123")
+
+def seed_users(db: Session) -> None:
+    users = _load_seed_users()
+    if not users:
+        return
+
+    for seed_user in users:
+        existing = db.scalar(select(User).where(User.email == seed_user["email"]))
+        if not existing:
+            existing = User(
+                id=seed_user["id"],
+                email=seed_user["email"],
+                full_name=seed_user["full_name"],
+                role=seed_user["role"],
+                password_hash=pwd_context.hash(seed_user["password"]),
+            )
+            db.add(existing)
+        else:
+            existing.full_name = seed_user["full_name"]
+            existing.role = seed_user["role"]
+            existing.password_hash = pwd_context.hash(seed_user["password"])
 
     db.commit()
 

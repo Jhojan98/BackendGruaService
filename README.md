@@ -45,6 +45,33 @@ Current table field definitions:
 	- `clients`: `id`, `name`, `membership`, `phone`
 	- `client_history`: `id`, `client_id`, `service_date`, `description`, `revenue`
 
+## Single File for Initial Data
+
+You can now edit all initial records in one file:
+
+- `seed-data/initial_data.json`
+
+This file contains seed data for all databases:
+
+- `auth.users`
+- `dispatch.trips`
+- `fleet.trucks`
+- `clients.clients`
+- `clients.history`
+
+How it is used:
+
+- On startup, each service reads `seed-data/initial_data.json`.
+- If its table is empty, it inserts data from this file.
+- If the file is missing/invalid JSON, no seed data is inserted.
+
+To apply changes in seed file to a fresh database:
+
+```bash
+docker compose down -v
+docker compose up --build
+```
+
 ## Service Structure (Separated Logic)
 
 Each microservice now follows this structure:

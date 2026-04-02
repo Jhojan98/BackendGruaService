@@ -28,6 +28,8 @@ services:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/auth_db
     ports:
       - "8001:8001"
+    volumes:
+      - ./seed-data:/app/seed-data:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,6 +72,8 @@ services:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/clients_db
     ports:
       - "8004:8004"
+    volumes:
+      - ./seed-data:/app/seed-data:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,0 +1,96 @@
+{
+  "auth": {
+    "users": [
+      {
+        "id": "u-admin-1",
+        "email": "admin@terra.local",
+        "full_name": "Terra Admin",
+        "role": "admin",
+        "password": "admin123"
+      },
+      {
+        "id": "u-dispatch-1",
+        "email": "dispatcher@terra.local",
+        "full_name": "Dispatch Operator",
+        "role": "dispatcher",
+        "password": "dispatch123"
+      }
+    ]
+  },
+  "dispatch": {
+    "trips": [
+      {
+        "id": "trip-1",
+        "client_id": "c1",
+        "client_name": "Aria Montgomery",
+        "origin": "Main St 123",
+        "destination": "7th Ave 90",
+        "distance": "8.4 km",
+        "status": "Pending",
+        "tow_truck": "Unassigned",
+        "date": "2026-04-02",
+        "time": "09:00"
+      }
+    ]
+  },
+  "fleet": {
+    "trucks": [
+      {
+        "id": "truck-1",
+        "unit_number": "Unit-701",
+        "truck_type": "Flatbed",
+        "status": "Available",
+        "lat": 40.7128,
+        "lng": -74.006
+      },
+      {
+        "id": "truck-2",
+        "unit_number": "Unit-702",
+        "truck_type": "Wrecker",
+        "status": "On Trip",
+        "lat": 40.7138,
+        "lng": -74.003
+      },
+      {
+        "id": "truck-3",
+        "unit_number": "Unit-703",
+        "truck_type": "Flatbed",
+        "status": "Maintenance",
+        "lat": 40.709,
+        "lng": -74.01
+      }
+    ]
+  },
+  "clients": {
+    "clients": [
+      {
+        "id": "c1",
+        "name": "Aria Montgomery",
+        "membership": "Premium",
+        "phone": "(503) 555-0123"
+      },
+      {
+        "id": "c2",
+        "name": "Ezra Fitz",
+        "membership": "Standard",
+        "phone": "(503) 555-0456"
+      }
+    ],
+    "history": [
+      {
+        "id": "h1",
+        "client_id": "c1",
+        "service_date": "2026-03-20",
+        "description": "Flatbed emergency tow",
+        "revenue": 180.0
+      },
+      {
+        "id": "h2",
+        "client_id": "c1",
+        "service_date": "2026-03-26",
+        "description": "Battery jumpstart",
+        "revenue": 60.0
+      }
+    ]
+  }
+}

@@ -209,14 +209,14 @@ async def list_fleet(_: Annotated[dict[str, Any], Depends(current_user)]) -> Any
     return await forward_json_request("GET", f"{settings.fleet_service_url}/internal/fleet")
 
 
-@app.get("/api/v1/fleet/{truck_id}")
-async def get_fleet_item(truck_id: str, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
-    return await forward_json_request("GET", f"{settings.fleet_service_url}/internal/fleet/{truck_id}")
-
-
 @app.get("/api/v1/fleet/locations")
 async def fleet_locations(_: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
     return await forward_json_request("GET", f"{settings.fleet_service_url}/internal/fleet/locations")
+
+
+@app.get("/api/v1/fleet/{truck_id}")
+async def get_fleet_item(truck_id: str, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
+    return await forward_json_request("GET", f"{settings.fleet_service_url}/internal/fleet/{truck_id}")
 
 
 @app.get("/api/v1/clients")

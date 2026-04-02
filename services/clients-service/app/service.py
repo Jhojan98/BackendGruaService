@@ -1,26 +1,41 @@
+import json
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .config import settings
 from .models import Client, ClientHistory
 from .schemas import ClientCreate, ClientHistoryResponse, ClientResponse
+
+
+def _load_clients_seed() -> tuple[list[dict], list[dict]]:
+    seed_path = Path(settings.seed_data_file)
+    if not seed_path.exists():
+        return [], []
+    try:
+        data = json.loads(seed_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return [], []
+
+    section = data.get("clients", {})
+    return section.get("clients", []), section.get("history", [])
 
 
 def seed_clients(db: Session) -> None:
     if db.scalar(select(Client).limit(1)):
         return
 
-    c1 = Client(id="c1", name="Aria Montgomery", membership="Premium", phone="(503) 555-0123")
-    c2 = Client(id="c2", name="Ezra Fitz", membership="Standard", phone="(503) 555-0456")
-    db.add_all([c1, c2])
-    db.add_all(
-        [
-            ClientHistory(id="h1", client_id="c1", service_date="2026-03-20", description="Flatbed emergency tow", revenue=180.0),
-            ClientHistory(id="h2", client_id="c1", service_date="2026-03-26", description="Battery jumpstart", revenue=60.0),
-        ]
-    )
+    clients, history = _load_clients_seed()
+    if not clients and not history:
+        return
+
+    if clients:
+        db.add_all([Client(**c) for c in clients])
+    if history:
+        db.add_all([ClientHistory(**h) for h in history])
     db.commit()
 
 

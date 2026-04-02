@@ -1,22 +1,46 @@
+import json
 import random
+from pathlib import Path
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .config import settings
 from .models import Truck
 from .schemas import LocationResponse, TruckResponse
+
+
+def _load_seed_trucks() -> list[dict]:
+    seed_path = Path(settings.seed_data_file)
+    if not seed_path.exists():
+        return []
+    try:
+        data = json.loads(seed_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    return data.get("fleet", {}).get("trucks", [])
 
 
 def seed_trucks(db: Session) -> None:
     if db.scalar(select(Truck).limit(1)):
         return
 
+    trucks = _load_seed_trucks()
+    if not trucks:
+        return
+
     db.add_all(
         [
-            Truck(id="truck-1", unit_number="Unit-701", truck_type="Flatbed", status="Available", lat=40.7128, lng=-74.0060),
-            Truck(id="truck-2", unit_number="Unit-702", truck_type="Wrecker", status="On Trip", lat=40.7138, lng=-74.0030),
-            Truck(id="truck-3", unit_number="Unit-703", truck_type="Flatbed", status="Maintenance", lat=40.7090, lng=-74.0100),
+            Truck(
+                id=t["id"],
+                unit_number=t["unit_number"],
+                truck_type=t["truck_type"],
+                status=t.get("status", "Available"),
+                lat=t["lat"],
+                lng=t["lng"],
+            )
+            for t in trucks
         ]
     )
     db.commit()
