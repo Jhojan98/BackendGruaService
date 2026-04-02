@@ -9,7 +9,7 @@ __pycache__/
 .venv/
 venv/
 env/
-
+test/
 # Environment files
 .env
 .env.*
