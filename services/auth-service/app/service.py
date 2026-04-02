@@ -8,25 +8,36 @@ from .security import create_access_token, pwd_context
 
 
 def seed_users(db: Session) -> None:
-    existing = db.scalar(select(User).where(User.email == "admin@terra.local"))
-    if existing:
-        return
+    admin = db.scalar(select(User).where(User.email == "admin@terra.local"))
+    if not admin:
+        admin = User(
+            id="u-admin-1",
+            email="admin@terra.local",
+            full_name="Terra Admin",
+            role="admin",
+            password_hash=pwd_context.hash("admin123"),
+        )
+        db.add(admin)
+    else:
+        admin.full_name = "Terra Admin"
+        admin.role = "admin"
+        admin.password_hash = pwd_context.hash("admin123")
 
-    admin = User(
-        id="u-admin-1",
-        email="admin@terra.local",
-        full_name="Terra Admin",
-        role="admin",
-        password_hash=pwd_context.hash("admin123"),
-    )
-    dispatcher = User(
-        id="u-dispatch-1",
-        email="dispatcher@terra.local",
-        full_name="Dispatch Operator",
-        role="dispatcher",
-        password_hash=pwd_context.hash("dispatch123"),
-    )
-    db.add_all([admin, dispatcher])
+    dispatcher = db.scalar(select(User).where(User.email == "dispatcher@terra.local"))
+    if not dispatcher:
+        dispatcher = User(
+            id="u-dispatch-1",
+            email="dispatcher@terra.local",
+            full_name="Dispatch Operator",
+            role="dispatcher",
+            password_hash=pwd_context.hash("dispatch123"),
+        )
+        db.add(dispatcher)
+    else:
+        dispatcher.full_name = "Dispatch Operator"
+        dispatcher.role = "dispatcher"
+        dispatcher.password_hash = pwd_context.hash("dispatch123")
+
     db.commit()
 
 

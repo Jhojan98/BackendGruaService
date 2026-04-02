@@ -1,9 +1,11 @@
 from typing import Annotated, Any
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +22,36 @@ class Settings(BaseSettings):
 
 settings = Settings()
 app = FastAPI(title="Grua API Gateway", version="1.0.0")
+bearer_scheme = HTTPBearer(auto_error=True)
+
+
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+
+class CreateTripBody(BaseModel):
+    clientId: str
+    clientName: str | None = None
+    origin: str | None = None
+    destination: str | None = None
+    originAddress: str | None = None
+    destinationAddress: str | None = None
+    distance: str = "0 km"
+
+
+class UpdateTripStatusBody(BaseModel):
+    status: str
+
+
+class AssignTripBody(BaseModel):
+    towTruck: str
+
+
+class CreateClientBody(BaseModel):
+    name: str
+    membership: str
+    phone: str
 
 app.add_middleware(
     CORSMiddleware,
@@ -42,11 +74,7 @@ async def forward_json_request(
         return response.json()
 
 
-def decode_bearer_token(authorization: str) -> dict[str, Any]:
-    scheme, _, token = authorization.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization header")
-
+def decode_bearer_token(token: str) -> dict[str, Any]:
     try:
         return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     except JWTError as exc:
@@ -54,11 +82,9 @@ def decode_bearer_token(authorization: str) -> dict[str, Any]:
 
 
 def current_user(
-    authorization: Annotated[str | None, Header()] = None,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
 ) -> dict[str, Any]:
-    if not authorization:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing authorization header")
-    return decode_bearer_token(authorization)
+    return decode_bearer_token(credentials.credentials)
 
 
 def require_admin(user: Annotated[dict[str, Any], Depends(current_user)]) -> dict[str, Any]:
@@ -73,9 +99,12 @@ def health() -> dict:
 
 
 @app.post("/api/v1/auth/login")
-async def login(request: Request) -> Any:
-    payload = await request.json()
-    return await forward_json_request("POST", f"{settings.auth_service_url}/internal/auth/login", body=payload)
+async def login(payload: LoginBody) -> Any:
+    return await forward_json_request(
+        "POST",
+        f"{settings.auth_service_url}/internal/auth/login",
+        body=payload.model_dump(),
+    )
 
 
 @app.get("/api/v1/users/me")
@@ -140,28 +169,38 @@ async def get_trip(trip_id: str, _: Annotated[dict[str, Any], Depends(current_us
 
 
 @app.post("/api/v1/trips")
-async def create_trip(request: Request, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
-    payload = await request.json()
+async def create_trip(payload: CreateTripBody, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
+    origin = payload.origin or payload.originAddress
+    destination = payload.destination or payload.destinationAddress
+    if not origin or not destination:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="origin/destination is required")
+
     normalized = {
-        "client_id": payload.get("clientId"),
-        "client_name": payload.get("clientName", "Unknown Client"),
-        "origin": payload.get("origin") or payload.get("originAddress"),
-        "destination": payload.get("destination") or payload.get("destinationAddress"),
-        "distance": payload.get("distance", "0 km"),
+        "client_id": payload.clientId,
+        "client_name": payload.clientName or "Unknown Client",
+        "origin": origin,
+        "destination": destination,
+        "distance": payload.distance,
     }
     return await forward_json_request("POST", f"{settings.dispatch_service_url}/internal/trips", body=normalized)
 
 
 @app.put("/api/v1/trips/{trip_id}/status")
-async def update_trip_status(trip_id: str, request: Request, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
-    payload = await request.json()
-    return await forward_json_request("PUT", f"{settings.dispatch_service_url}/internal/trips/{trip_id}/status", body=payload)
+async def update_trip_status(
+    trip_id: str,
+    payload: UpdateTripStatusBody,
+    _: Annotated[dict[str, Any], Depends(current_user)],
+) -> Any:
+    return await forward_json_request(
+        "PUT",
+        f"{settings.dispatch_service_url}/internal/trips/{trip_id}/status",
+        body=payload.model_dump(),
+    )
 
 
 @app.put("/api/v1/trips/{trip_id}/assign")
-async def assign_trip(trip_id: str, request: Request, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
-    payload = await request.json()
-    normalized = {"tow_truck": payload.get("towTruck")}
+async def assign_trip(trip_id: str, payload: AssignTripBody, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
+    normalized = {"tow_truck": payload.towTruck}
     return await forward_json_request("PUT", f"{settings.dispatch_service_url}/internal/trips/{trip_id}/assign", body=normalized)
 
 
@@ -186,10 +225,13 @@ async def list_clients(_: Annotated[dict[str, Any], Depends(current_user)]) -> A
 
 
 @app.post("/api/v1/clients")
-async def create_client(request: Request, user: Annotated[dict[str, Any], Depends(require_admin)]) -> Any:
+async def create_client(payload: CreateClientBody, user: Annotated[dict[str, Any], Depends(require_admin)]) -> Any:
     _ = user
-    payload = await request.json()
-    return await forward_json_request("POST", f"{settings.clients_service_url}/internal/clients", body=payload)
+    return await forward_json_request(
+        "POST",
+        f"{settings.clients_service_url}/internal/clients",
+        body=payload.model_dump(),
+    )
 
 
 @app.get("/api/v1/clients/{client_id}/history")
