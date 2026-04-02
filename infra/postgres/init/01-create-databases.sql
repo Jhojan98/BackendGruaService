@@ -1,0 +1,4 @@
+CREATE DATABASE auth_db;
+CREATE DATABASE dispatch_db;
+CREATE DATABASE fleet_db;
+CREATE DATABASE clients_db;

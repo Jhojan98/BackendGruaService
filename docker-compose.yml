@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: grua-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  auth-service:
+    build: ./services/auth-service
+    container_name: grua-auth-service
+    env_file:
+      - .env
+    environment:
+      SERVICE_PORT: ${AUTH_SERVICE_PORT:-8001}
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/auth_db
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  dispatch-service:
+    build: ./services/dispatch-service
+    container_name: grua-dispatch-service
+    env_file:
+      - .env
+    environment:
+      SERVICE_PORT: ${DISPATCH_SERVICE_PORT:-8002}
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/dispatch_db
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  fleet-service:
+    build: ./services/fleet-service
+    container_name: grua-fleet-service
+    env_file:
+      - .env
+    environment:
+      SERVICE_PORT: ${FLEET_SERVICE_PORT:-8003}
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/fleet_db
+    ports:
+      - "8003:8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  clients-service:
+    build: ./services/clients-service
+    container_name: grua-clients-service
+    env_file:
+      - .env
+    environment:
+      SERVICE_PORT: ${CLIENTS_SERVICE_PORT:-8004}
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/clients_db
+    ports:
+      - "8004:8004"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  gateway:
+    build: ./gateway
+    container_name: grua-gateway
+    env_file:
+      - .env
+    environment:
+      SERVICE_PORT: ${GATEWAY_PORT:-8000}
+      AUTH_SERVICE_URL: http://auth-service:8001
+      DISPATCH_SERVICE_URL: http://dispatch-service:8002
+      FLEET_SERVICE_URL: http://fleet-service:8003
+      CLIENTS_SERVICE_URL: http://clients-service:8004
+    ports:
+      - "8000:8000"
+    depends_on:
+      - auth-service
+      - dispatch-service
+      - fleet-service
+      - clients-service
+
+volumes:
+  postgres_data:
