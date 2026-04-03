@@ -38,7 +38,7 @@ Database creation happens in two levels:
 Current table field definitions:
 
 - Auth DB (`services/auth-service/app/models.py`)
-	- `users`: `id`, `email`, `full_name`, `role`, `password_hash`
+	- `users`: `id`, `email`, `full_name`, `role`, `password_hash`, `profile_image_url`, `theme`, `language`, `email_alerts`, `sms_urgent_alerts`, `browser_notifications`, `employee_id`, `office_location`
 - Dispatch DB (`services/dispatch-service/app/models.py`)
 	- `trips`: `id`, `client_id`, `client_name`, `origin`, `destination`, `distance`, `status`, `tow_truck`, `date`, `time`
 - Fleet DB (`services/fleet-service/app/models.py`)
@@ -92,7 +92,11 @@ Each microservice now follows this structure:
 Implemented in gateway (`/api/v1`):
 
 - `POST /auth/login`
+- `GET /users` (admin role required)
 - `GET /users/me`
+- `PATCH /users/me` (JSON or multipart form-data with optional `file` for profile image upload via media-service)
+- `PATCH /users/{id}` (admin role required; JSON or multipart form-data with optional `file`)
+- `POST /users` (admin role required)
 - `GET /notifications`
 - `GET /dashboard/stats`
 - `GET /dashboard/quick-actions`
@@ -172,6 +176,16 @@ API_BASE_URL=http://localhost:8000 pytest
 	- password: `dispatch123`
 
 Use `POST /api/v1/auth/login` to get a bearer token.
+
+## User Profile and User Creation
+
+- `PATCH /api/v1/users/me` supports two body formats:
+	- `application/json` for profile/preferences updates.
+	- `multipart/form-data` for profile/preferences and optional profile image upload in `file`.
+- When `file` is sent, gateway uploads the image internally to media-service and persists the returned URL in `profile_image_url`.
+- `POST /api/v1/users` creates new users and requires admin role.
+- `GET /api/v1/users` lists all users and requires admin role.
+- `PATCH /api/v1/users/{id}` updates any user and requires admin role.
 
 ## Notes
 

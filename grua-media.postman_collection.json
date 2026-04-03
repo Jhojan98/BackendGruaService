@@ -1,0 +1,699 @@
+{
+  "info": {
+    "name": "Grua Backend API - Full",
+    "_postman_id": "0f9a6ad0-1b9c-46eb-b1e3-9d4cdfd3bfb7",
+    "description": "Coleccion completa del backend Grua: gateway publico + endpoints internos por microservicio.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "gatewayBaseUrl", "value": "http://localhost:8000" },
+    { "key": "authBaseUrl", "value": "http://localhost:8001" },
+    { "key": "dispatchBaseUrl", "value": "http://localhost:8002" },
+    { "key": "fleetBaseUrl", "value": "http://localhost:8003" },
+    { "key": "clientsBaseUrl", "value": "http://localhost:8004" },
+    { "key": "mediaBaseUrl", "value": "http://localhost:8005" },
+
+    { "key": "adminEmail", "value": "admin@terra.local" },
+    { "key": "adminPassword", "value": "admin123" },
+    { "key": "dispatcherEmail", "value": "dispatcher@terra.local" },
+    { "key": "dispatcherPassword", "value": "dispatch123" },
+
+    { "key": "token", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "dispatcherToken", "value": "" },
+
+    { "key": "userId", "value": "u-admin-1" },
+    { "key": "targetUserId", "value": "u-dispatch-1" },
+    { "key": "tripId", "value": "trip-1" },
+    { "key": "truckId", "value": "truck-1" },
+    { "key": "clientId", "value": "c1" },
+    { "key": "mediaId", "value": "" },
+
+    { "key": "entityType", "value": "users" },
+    { "key": "entityId", "value": "u-admin-1" },
+    { "key": "period", "value": "daily" }
+  ],
+  "item": [
+    {
+      "name": "0. Health Checks",
+      "item": [
+        {
+          "name": "Gateway Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{gatewayBaseUrl}}/api/health", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "health"] }
+          }
+        },
+        {
+          "name": "Auth Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{authBaseUrl}}/health", "host": ["{{authBaseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Dispatch Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{dispatchBaseUrl}}/health", "host": ["{{dispatchBaseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Fleet Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{fleetBaseUrl}}/health", "host": ["{{fleetBaseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Clients Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{clientsBaseUrl}}/health", "host": ["{{clientsBaseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "Media Health",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{mediaBaseUrl}}/health", "host": ["{{mediaBaseUrl}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Login Admin (set adminToken + token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/auth/login", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const data = pm.response.json();",
+                "if (data && data.access_token) {",
+                "  pm.collectionVariables.set('adminToken', data.access_token);",
+                "  pm.collectionVariables.set('token', data.access_token);",
+                "}"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Login Dispatcher (set dispatcherToken)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{dispatcherEmail}}\",\n  \"password\": \"{{dispatcherPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/auth/login", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const data = pm.response.json();",
+                "if (data && data.access_token) {",
+                "  pm.collectionVariables.set('dispatcherToken', data.access_token);",
+                "}"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "2. Users (Gateway)",
+      "item": [
+        {
+          "name": "Get My User",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/users/me", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "users", "me"] }
+          }
+        },
+        {
+          "name": "Patch My User (JSON)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"theme\": \"dark\",\n  \"language\": \"es\",\n  \"email_alerts\": true,\n  \"sms_urgent_alerts\": false,\n  \"browser_notifications\": true,\n  \"employee_id\": \"EMP-0099\",\n  \"office_location\": \"HQ - Lima\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/users/me", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "users", "me"] }
+          }
+        },
+        {
+          "name": "Patch My User (Multipart + Image)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "theme", "type": "text", "value": "dark" },
+                { "key": "language", "type": "text", "value": "es" },
+                { "key": "email_alerts", "type": "text", "value": "true" },
+                { "key": "sms_urgent_alerts", "type": "text", "value": "false" },
+                { "key": "browser_notifications", "type": "text", "value": "true" }
+              ]
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/users/me", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "users", "me"] }
+          }
+        },
+        {
+          "name": "List Users (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/users", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "users"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "const data = pm.response.json();",
+                "if (Array.isArray(data)) {",
+                "  const target = data.find(u => u.email !== pm.collectionVariables.get('adminEmail'));",
+                "  if (target && target.id) pm.collectionVariables.set('targetUserId', target.id);",
+                "}"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Create User (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nuevo.operador+{{$timestamp}}@terra.local\",\n  \"full_name\": \"Nuevo Operador\",\n  \"role\": \"dispatcher\",\n  \"password\": \"secret123\",\n  \"theme\": \"light\",\n  \"language\": \"es\",\n  \"email_alerts\": true,\n  \"sms_urgent_alerts\": true,\n  \"browser_notifications\": true,\n  \"employee_id\": \"EMP-{{$timestamp}}\",\n  \"office_location\": \"Operations Center\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/users", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "users"] }
+          }
+        },
+        {
+          "name": "Patch Any User (Admin, JSON)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Dispatch Operator Updated\",\n  \"theme\": \"dark\",\n  \"office_location\": \"Night Shift Office\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/users/{{targetUserId}}", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "users", "{{targetUserId}}"] }
+          }
+        },
+        {
+          "name": "Patch Any User (Admin, Multipart + Image)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "theme", "type": "text", "value": "dark" },
+                { "key": "language", "type": "text", "value": "es" }
+              ]
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/users/{{targetUserId}}", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "users", "{{targetUserId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Trips (Gateway)",
+      "item": [
+        {
+          "name": "List Trips",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{gatewayBaseUrl}}/api/v1/trips?status=&date=",
+              "host": ["{{gatewayBaseUrl}}"],
+              "path": ["api", "v1", "trips"],
+              "query": [
+                { "key": "status", "value": "" },
+                { "key": "date", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Trip",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/trips/{{tripId}}", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "trips", "{{tripId}}"] }
+          }
+        },
+        {
+          "name": "Create Trip",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientId\": \"c1\",\n  \"clientName\": \"Aria Montgomery\",\n  \"origin\": \"Main St 123\",\n  \"destination\": \"7th Ave 90\",\n  \"distance\": \"8.4 km\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/trips", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "trips"] }
+          }
+        },
+        {
+          "name": "Update Trip Status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/trips/{{tripId}}/status", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "trips", "{{tripId}}", "status"] }
+          }
+        },
+        {
+          "name": "Assign Trip",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"towTruck\": \"Unit-701\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/trips/{{tripId}}/assign", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "trips", "{{tripId}}", "assign"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Fleet (Gateway)",
+      "item": [
+        {
+          "name": "List Fleet",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/fleet", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "fleet"] }
+          }
+        },
+        {
+          "name": "Fleet Locations",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/fleet/locations", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "fleet", "locations"] }
+          }
+        },
+        {
+          "name": "Get Fleet Item",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/fleet/{{truckId}}", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "fleet", "{{truckId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Clients (Gateway)",
+      "item": [
+        {
+          "name": "List Clients",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/clients", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "clients"] }
+          }
+        },
+        {
+          "name": "Create Client (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Client {{$timestamp}}\",\n  \"membership\": \"Premium\",\n  \"phone\": \"(503) 555-5555\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/clients", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "clients"] }
+          }
+        },
+        {
+          "name": "Client History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/clients/{{clientId}}/history", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "clients", "{{clientId}}", "history"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Dashboard, Notifications, Analytics (Gateway)",
+      "item": [
+        {
+          "name": "Notifications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/notifications", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "notifications"] }
+          }
+        },
+        {
+          "name": "Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/dashboard/stats", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "dashboard", "stats"] }
+          }
+        },
+        {
+          "name": "Dashboard Quick Actions",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/dashboard/quick-actions", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "dashboard", "quick-actions"] }
+          }
+        },
+        {
+          "name": "Analytics Revenue",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{gatewayBaseUrl}}/api/v1/analytics/revenue?period={{period}}",
+              "host": ["{{gatewayBaseUrl}}"],
+              "path": ["api", "v1", "analytics", "revenue"],
+              "query": [{ "key": "period", "value": "{{period}}" }]
+            }
+          }
+        },
+        {
+          "name": "Analytics Performance",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/analytics/performance", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "analytics", "performance"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. Media (Gateway)",
+      "item": [
+        {
+          "name": "Upload Media",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "entity_type", "type": "text", "value": "{{entityType}}" },
+                { "key": "entity_id", "type": "text", "value": "{{entityId}}" },
+                { "key": "access_mode", "type": "text", "value": "public" }
+              ]
+            },
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/media/upload", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "media", "upload"] }
+          }
+        },
+        {
+          "name": "List Media By Entity",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{gatewayBaseUrl}}/api/v1/media/by-entity?entity_type={{entityType}}&entity_id={{entityId}}",
+              "host": ["{{gatewayBaseUrl}}"],
+              "path": ["api", "v1", "media", "by-entity"],
+              "query": [
+                { "key": "entity_type", "value": "{{entityType}}" },
+                { "key": "entity_id", "value": "{{entityId}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Media By Id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": { "raw": "{{gatewayBaseUrl}}/api/v1/media/{{mediaId}}", "host": ["{{gatewayBaseUrl}}"], "path": ["api", "v1", "media", "{{mediaId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "8. Internal Auth Service",
+      "item": [
+        {
+          "name": "Internal Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{authBaseUrl}}/internal/auth/login", "host": ["{{authBaseUrl}}"], "path": ["internal", "auth", "login"] }
+          }
+        },
+        {
+          "name": "Internal Verify Token",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{token}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{authBaseUrl}}/internal/auth/verify", "host": ["{{authBaseUrl}}"], "path": ["internal", "auth", "verify"] }
+          }
+        },
+        {
+          "name": "Internal Users Me",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{authBaseUrl}}/internal/users/me?user_id={{userId}}",
+              "host": ["{{authBaseUrl}}"],
+              "path": ["internal", "users", "me"],
+              "query": [{ "key": "user_id", "value": "{{userId}}" }]
+            }
+          }
+        },
+        {
+          "name": "Internal Users List",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{authBaseUrl}}/internal/users", "host": ["{{authBaseUrl}}"], "path": ["internal", "users"] }
+          }
+        },
+        {
+          "name": "Internal User Patch",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"theme\": \"dark\",\n  \"language\": \"es\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{authBaseUrl}}/internal/users/{{targetUserId}}", "host": ["{{authBaseUrl}}"], "path": ["internal", "users", "{{targetUserId}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "9. Internal Dispatch Service",
+      "item": [
+        {
+          "name": "Internal List Trips",
+          "request": { "method": "GET", "url": { "raw": "{{dispatchBaseUrl}}/internal/trips", "host": ["{{dispatchBaseUrl}}"], "path": ["internal", "trips"] } }
+        },
+        {
+          "name": "Internal Get Trip",
+          "request": { "method": "GET", "url": { "raw": "{{dispatchBaseUrl}}/internal/trips/{{tripId}}", "host": ["{{dispatchBaseUrl}}"], "path": ["internal", "trips", "{{tripId}}"] } }
+        },
+        {
+          "name": "Internal Create Trip",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"c1\",\n  \"client_name\": \"Aria Montgomery\",\n  \"origin\": \"Main St 123\",\n  \"destination\": \"7th Ave 90\",\n  \"distance\": \"8.4 km\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{dispatchBaseUrl}}/internal/trips", "host": ["{{dispatchBaseUrl}}"], "path": ["internal", "trips"] }
+          }
+        },
+        {
+          "name": "Internal Update Trip Status",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"In Progress\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{dispatchBaseUrl}}/internal/trips/{{tripId}}/status", "host": ["{{dispatchBaseUrl}}"], "path": ["internal", "trips", "{{tripId}}", "status"] }
+          }
+        },
+        {
+          "name": "Internal Assign Trip",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tow_truck\": \"Unit-701\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{dispatchBaseUrl}}/internal/trips/{{tripId}}/assign", "host": ["{{dispatchBaseUrl}}"], "path": ["internal", "trips", "{{tripId}}", "assign"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "10. Internal Fleet Service",
+      "item": [
+        {
+          "name": "Internal List Fleet",
+          "request": { "method": "GET", "url": { "raw": "{{fleetBaseUrl}}/internal/fleet", "host": ["{{fleetBaseUrl}}"], "path": ["internal", "fleet"] } }
+        },
+        {
+          "name": "Internal Fleet Locations",
+          "request": { "method": "GET", "url": { "raw": "{{fleetBaseUrl}}/internal/fleet/locations", "host": ["{{fleetBaseUrl}}"], "path": ["internal", "fleet", "locations"] } }
+        },
+        {
+          "name": "Internal Get Fleet Item",
+          "request": { "method": "GET", "url": { "raw": "{{fleetBaseUrl}}/internal/fleet/{{truckId}}", "host": ["{{fleetBaseUrl}}"], "path": ["internal", "fleet", "{{truckId}}"] } }
+        }
+      ]
+    },
+    {
+      "name": "11. Internal Clients Service",
+      "item": [
+        {
+          "name": "Internal List Clients",
+          "request": { "method": "GET", "url": { "raw": "{{clientsBaseUrl}}/internal/clients", "host": ["{{clientsBaseUrl}}"], "path": ["internal", "clients"] } }
+        },
+        {
+          "name": "Internal Create Client",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Client {{$timestamp}}\",\n  \"membership\": \"Premium\",\n  \"phone\": \"(503) 555-9999\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{clientsBaseUrl}}/internal/clients", "host": ["{{clientsBaseUrl}}"], "path": ["internal", "clients"] }
+          }
+        },
+        {
+          "name": "Internal Client History",
+          "request": { "method": "GET", "url": { "raw": "{{clientsBaseUrl}}/internal/clients/{{clientId}}/history", "host": ["{{clientsBaseUrl}}"], "path": ["internal", "clients", "{{clientId}}", "history"] } }
+        }
+      ]
+    },
+    {
+      "name": "12. Internal Media Service",
+      "item": [
+        {
+          "name": "Internal Upload Media",
+          "request": {
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" },
+                { "key": "entity_type", "type": "text", "value": "{{entityType}}" },
+                { "key": "entity_id", "type": "text", "value": "{{entityId}}" },
+                { "key": "uploaded_by", "type": "text", "value": "u-admin-1" },
+                { "key": "access_mode", "type": "text", "value": "public" }
+              ]
+            },
+            "url": { "raw": "{{mediaBaseUrl}}/internal/media/upload", "host": ["{{mediaBaseUrl}}"], "path": ["internal", "media", "upload"] }
+          }
+        },
+        {
+          "name": "Internal List Media By Entity",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{mediaBaseUrl}}/internal/media/by-entity?entity_type={{entityType}}&entity_id={{entityId}}",
+              "host": ["{{mediaBaseUrl}}"],
+              "path": ["internal", "media", "by-entity"],
+              "query": [
+                { "key": "entity_type", "value": "{{entityType}}" },
+                { "key": "entity_id", "value": "{{entityId}}" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Internal Get Media By Id",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{mediaBaseUrl}}/internal/media/{{mediaId}}", "host": ["{{mediaBaseUrl}}"], "path": ["internal", "media", "{{mediaId}}"] }
+          }
+        }
+      ]
+    }
+  ]
+}

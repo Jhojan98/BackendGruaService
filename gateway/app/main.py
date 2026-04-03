@@ -1,11 +1,14 @@
-from typing import Annotated, Any
+from datetime import date
+import re
+from uuid import uuid4
+from typing import Annotated, Any, Literal
 
 import httpx
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,9 +53,142 @@ class AssignTripBody(BaseModel):
 
 
 class CreateClientBody(BaseModel):
-    name: str
-    membership: str
-    phone: str
+    name: str = Field(min_length=1, max_length=255)
+    phone: str = Field(min_length=3, max_length=64)
+    status: Literal["active", "inactive", "suspended"]
+    contact_person: str = Field(min_length=1, max_length=255)
+    email: str = Field(min_length=5, max_length=255)
+    client_type: Literal["corporate", "individual"]
+    logo_url: str | None = None
+    last_service_date: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str) -> str:
+        normalized = value.strip()
+        if not re.fullmatch(r"^[+()\-\s0-9]{7,20}$", normalized):
+            raise ValueError("Invalid phone format")
+        return normalized
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", normalized):
+            raise ValueError("Invalid email format")
+        return normalized
+
+    @field_validator("last_service_date")
+    @classmethod
+    def validate_last_service_date(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        normalized = value.strip()
+        try:
+            date.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError("last_service_date must be YYYY-MM-DD") from exc
+        return normalized
+
+
+class UpdateClientBody(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    status: Literal["active", "inactive", "suspended"] | None = None
+    contact_person: str | None = None
+    email: str | None = None
+    client_type: Literal["corporate", "individual"] | None = None
+    logo_url: str | None = None
+    last_service_date: str | None = None
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        normalized = value.strip()
+        if not re.fullmatch(r"^[+()\-\s0-9]{7,20}$", normalized):
+            raise ValueError("Invalid phone format")
+        return normalized
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", normalized):
+            raise ValueError("Invalid email format")
+        return normalized
+
+    @field_validator("last_service_date")
+    @classmethod
+    def validate_last_service_date(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        normalized = value.strip()
+        try:
+            date.fromisoformat(normalized)
+        except ValueError as exc:
+            raise ValueError("last_service_date must be YYYY-MM-DD") from exc
+        return normalized
+
+
+class CreateClientVehicleBody(BaseModel):
+    make: str
+    model: str
+    license_plate: str
+    is_active: bool = True
+
+
+class UpdateClientVehicleBody(BaseModel):
+    make: str | None = None
+    model: str | None = None
+    license_plate: str | None = None
+    is_active: bool | None = None
+
+
+class UpdateUserMeBody(BaseModel):
+    email: str | None = Field(default=None, min_length=3, max_length=255)
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    profile_image_url: str | None = None
+    theme: Literal["light", "dark"] | None = None
+    language: str | None = None
+    email_alerts: bool | None = None
+    sms_urgent_alerts: bool | None = None
+    browser_notifications: bool | None = None
+    employee_id: str | None = None
+    office_location: str | None = None
+
+
+class CreateUserBody(BaseModel):
+    email: str
+    full_name: str
+    role: Literal["admin", "dispatcher"] = "dispatcher"
+    password: str
+    profile_image_url: str | None = None
+    theme: Literal["light", "dark"] = "light"
+    language: str = "es"
+    email_alerts: bool = True
+    sms_urgent_alerts: bool = True
+    browser_notifications: bool = True
+    employee_id: str | None = None
+    office_location: str | None = None
+
+
+class UpdateAnyUserBody(BaseModel):
+    email: str | None = None
+    full_name: str | None = None
+    role: Literal["admin", "dispatcher"] | None = None
+    password: str | None = None
+    profile_image_url: str | None = None
+    theme: Literal["light", "dark"] | None = None
+    language: str | None = None
+    email_alerts: bool | None = None
+    sms_urgent_alerts: bool | None = None
+    browser_notifications: bool | None = None
+    employee_id: str | None = None
+    office_location: str | None = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -82,6 +218,8 @@ async def forward_json_request(
                 if response.text:
                     detail = response.text
             raise HTTPException(status_code=response.status_code, detail=detail)
+        if response.status_code == status.HTTP_204_NO_CONTENT or not response.content:
+            return None
         return response.json()
 
 
@@ -126,6 +264,119 @@ def require_admin(user: Annotated[dict[str, Any], Depends(current_user)]) -> dic
     return user
 
 
+def _parse_bool(raw: str, field_name: str) -> bool:
+    normalized = raw.strip().lower()
+    if normalized in {"true", "1", "yes", "on"}:
+        return True
+    if normalized in {"false", "0", "no", "off"}:
+        return False
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid boolean for {field_name}")
+
+
+async def _build_user_update_payload(
+    request: Request,
+    *,
+    target_user_id: str,
+    uploaded_by: str,
+) -> dict[str, Any]:
+    content_type = request.headers.get("content-type", "")
+    payload_data: dict[str, Any] = {}
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+
+        raw_file = form.get("file") or form.get("profile_image") or form.get("profileImage")
+        if raw_file is not None and hasattr(raw_file, "read") and hasattr(raw_file, "filename"):
+            content = await raw_file.read()
+            media_data = await forward_multipart_request(
+                url=f"{settings.media_service_url}/internal/media/upload",
+                files={
+                    "file": (
+                        raw_file.filename or "profile-image.bin",
+                        content,
+                        getattr(raw_file, "content_type", None) or "application/octet-stream",
+                    )
+                },
+                form_data={
+                    "entity_type": "users",
+                    "entity_id": target_user_id,
+                    "uploaded_by": uploaded_by,
+                    "access_mode": "public",
+                },
+            )
+            payload_data["profile_image_url"] = media_data.get("url")
+
+        text_fields = {
+            "email": form.get("email"),
+            "full_name": form.get("full_name"),
+            "role": form.get("role"),
+            "password": form.get("password"),
+            "profile_image_url": form.get("profile_image_url"),
+            "theme": form.get("theme"),
+            "language": form.get("language"),
+            "employee_id": form.get("employee_id"),
+            "office_location": form.get("office_location"),
+        }
+        for key, value in text_fields.items():
+            if isinstance(value, str) and value != "":
+                payload_data[key] = value
+
+        for key in ["email_alerts", "sms_urgent_alerts", "browser_notifications"]:
+            value = form.get(key)
+            if isinstance(value, str) and value != "":
+                payload_data[key] = _parse_bool(value, key)
+    else:
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid JSON body") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Request body must be an object")
+        payload_data = body
+
+    return payload_data
+
+
+def _coerce_client_field(raw: Any) -> Any:
+    if isinstance(raw, str):
+        value = raw.strip()
+        return value if value != "" else None
+    return raw
+
+
+async def _build_client_payload_from_form(request: Request) -> tuple[dict[str, Any], UploadFile | None]:
+    form = await request.form()
+    raw_file = form.get("file") or form.get("logo") or form.get("logo_image") or form.get("logoImage")
+    file_value: UploadFile | None = None
+    if raw_file is not None and hasattr(raw_file, "read") and hasattr(raw_file, "filename"):
+        file_value = raw_file  # type: ignore[assignment]
+
+    payload_data: dict[str, Any] = {}
+    text_fields = [
+        "name",
+        "phone",
+        "status",
+        "contact_person",
+        "email",
+        "client_type",
+        "last_service_date",
+    ]
+    for key in text_fields:
+        value = _coerce_client_field(form.get(key))
+        if value is not None:
+            payload_data[key] = value
+
+    return payload_data, file_value
+
+
+def _reject_manual_client_logo_url(payload_data: dict[str, Any]) -> None:
+    if "logo_url" in payload_data and payload_data.get("logo_url") is not None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="logo_url cannot be set directly. Upload a logo file instead.",
+        )
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "service": "gateway"}
@@ -144,6 +395,70 @@ async def login(payload: LoginBody) -> Any:
 async def me(user: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
     user_id = user.get("sub")
     return await forward_json_request("GET", f"{settings.auth_service_url}/internal/users/me", params={"user_id": user_id})
+
+
+@app.patch("/api/v1/users/me")
+async def update_me(request: Request, user: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
+    user_id = user.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+    payload_data = await _build_user_update_payload(request, target_user_id=user_id, uploaded_by=user_id)
+
+    try:
+        payload = UpdateUserMeBody(**payload_data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
+    update_payload = payload.model_dump(exclude_none=True)
+    if not update_payload:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updatable fields provided")
+
+    return await forward_json_request(
+        "PATCH",
+        f"{settings.auth_service_url}/internal/users/me",
+        body=update_payload,
+        params={"user_id": user_id},
+    )
+
+
+@app.get("/api/v1/users")
+async def list_users(_: Annotated[dict[str, Any], Depends(require_admin)]) -> Any:
+    return await forward_json_request("GET", f"{settings.auth_service_url}/internal/users")
+
+
+@app.patch("/api/v1/users/{target_user_id}")
+async def update_any_user(
+    target_user_id: str,
+    request: Request,
+    admin_user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> Any:
+    admin_id = admin_user.get("sub")
+    if not admin_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+
+    payload_data = await _build_user_update_payload(request, target_user_id=target_user_id, uploaded_by=admin_id)
+    try:
+        payload = UpdateAnyUserBody(**payload_data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
+
+    update_payload = payload.model_dump(exclude_none=True)
+    if not update_payload:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updatable fields provided")
+
+    return await forward_json_request(
+        "PATCH",
+        f"{settings.auth_service_url}/internal/users/{target_user_id}",
+        body=update_payload,
+    )
+
+
+@app.post("/api/v1/users", status_code=201)
+async def create_user(payload: CreateUserBody, _: Annotated[dict[str, Any], Depends(require_admin)]) -> Any:
+    return await forward_json_request(
+        "POST",
+        f"{settings.auth_service_url}/internal/users",
+        body=payload.model_dump(),
+    )
 
 
 @app.get("/api/v1/notifications")
@@ -257,19 +572,189 @@ async def list_clients(_: Annotated[dict[str, Any], Depends(current_user)]) -> A
     return await forward_json_request("GET", f"{settings.clients_service_url}/internal/clients")
 
 
-@app.post("/api/v1/clients")
-async def create_client(payload: CreateClientBody, user: Annotated[dict[str, Any], Depends(require_admin)]) -> Any:
-    _ = user
-    return await forward_json_request(
+@app.post("/api/v1/clients", status_code=201)
+async def create_client(request: Request, user: Annotated[dict[str, Any], Depends(require_admin)]) -> Any:
+    admin_id = user.get("sub")
+    if not admin_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+
+    content_type = request.headers.get("content-type", "")
+    logo_file: UploadFile | None = None
+    if "multipart/form-data" in content_type:
+        payload_data, logo_file = await _build_client_payload_from_form(request)
+    else:
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid JSON body") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Request body must be an object")
+        payload_data = body
+
+    _reject_manual_client_logo_url(payload_data)
+
+    try:
+        payload = CreateClientBody(**payload_data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
+
+    created_client = await forward_json_request(
         "POST",
         f"{settings.clients_service_url}/internal/clients",
         body=payload.model_dump(),
+    )
+
+    if logo_file is not None:
+        content = await logo_file.read()
+        media_data = await forward_multipart_request(
+            url=f"{settings.media_service_url}/internal/media/upload",
+            files={
+                "file": (
+                    logo_file.filename or f"client-logo-{uuid4().hex}.bin",
+                    content,
+                    logo_file.content_type or "application/octet-stream",
+                )
+            },
+            form_data={
+                "entity_type": "clients",
+                "entity_id": created_client["id"],
+                "uploaded_by": admin_id,
+                "access_mode": "public",
+            },
+        )
+        created_client = await forward_json_request(
+            "PATCH",
+            f"{settings.clients_service_url}/internal/clients/{created_client['id']}",
+            body={"logo_url": media_data.get("url")},
+        )
+
+    return created_client
+
+
+@app.patch("/api/v1/clients/{client_id}")
+async def update_client(
+    client_id: str,
+    request: Request,
+    user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> Any:
+    admin_id = user.get("sub")
+    if not admin_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+
+    content_type = request.headers.get("content-type", "")
+    logo_file: UploadFile | None = None
+    if "multipart/form-data" in content_type:
+        payload_data, logo_file = await _build_client_payload_from_form(request)
+    else:
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid JSON body") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Request body must be an object")
+        payload_data = body
+
+    _reject_manual_client_logo_url(payload_data)
+
+    if logo_file is not None:
+        content = await logo_file.read()
+        media_data = await forward_multipart_request(
+            url=f"{settings.media_service_url}/internal/media/upload",
+            files={
+                "file": (
+                    logo_file.filename or f"client-logo-{uuid4().hex}.bin",
+                    content,
+                    logo_file.content_type or "application/octet-stream",
+                )
+            },
+            form_data={
+                "entity_type": "clients",
+                "entity_id": client_id,
+                "uploaded_by": admin_id,
+                "access_mode": "public",
+            },
+        )
+        payload_data["logo_url"] = media_data.get("url")
+
+    try:
+        payload = UpdateClientBody(**payload_data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
+
+    update_payload = payload.model_dump(exclude_none=True)
+    if not update_payload:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updatable fields provided")
+
+    return await forward_json_request(
+        "PATCH",
+        f"{settings.clients_service_url}/internal/clients/{client_id}",
+        body=update_payload,
+    )
+
+
+@app.delete("/api/v1/clients/{client_id}", status_code=204)
+async def delete_client(client_id: str, user: Annotated[dict[str, Any], Depends(require_admin)]) -> None:
+    _ = user
+    await forward_json_request(
+        "DELETE",
+        f"{settings.clients_service_url}/internal/clients/{client_id}",
     )
 
 
 @app.get("/api/v1/clients/{client_id}/history")
 async def client_history(client_id: str, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
     return await forward_json_request("GET", f"{settings.clients_service_url}/internal/clients/{client_id}/history")
+
+
+@app.get("/api/v1/clients/{client_id}/vehicles")
+async def client_vehicles(client_id: str, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
+    return await forward_json_request("GET", f"{settings.clients_service_url}/internal/clients/{client_id}/vehicles")
+
+
+@app.post("/api/v1/clients/{client_id}/vehicles", status_code=201)
+async def create_client_vehicle(
+    client_id: str,
+    payload: CreateClientVehicleBody,
+    user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> Any:
+    _ = user
+    return await forward_json_request(
+        "POST",
+        f"{settings.clients_service_url}/internal/clients/{client_id}/vehicles",
+        body=payload.model_dump(),
+    )
+
+
+@app.patch("/api/v1/clients/{client_id}/vehicles/{vehicle_id}")
+async def update_client_vehicle(
+    client_id: str,
+    vehicle_id: str,
+    payload: UpdateClientVehicleBody,
+    user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> Any:
+    _ = user
+    update_payload = payload.model_dump(exclude_none=True)
+    if not update_payload:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updatable fields provided")
+
+    return await forward_json_request(
+        "PATCH",
+        f"{settings.clients_service_url}/internal/clients/{client_id}/vehicles/{vehicle_id}",
+        body=update_payload,
+    )
+
+
+@app.delete("/api/v1/clients/{client_id}/vehicles/{vehicle_id}", status_code=204)
+async def delete_client_vehicle(
+    client_id: str,
+    vehicle_id: str,
+    user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> None:
+    _ = user
+    await forward_json_request(
+        "DELETE",
+        f"{settings.clients_service_url}/internal/clients/{client_id}/vehicles/{vehicle_id}",
+    )
 
 
 @app.get("/api/v1/analytics/revenue")

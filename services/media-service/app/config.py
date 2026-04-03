@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     max_upload_size_mb: int = 10
     allowed_image_mime_types: str = "image/jpeg,image/png,image/webp"
-    public_entity_types: str = "clients"
+    public_entity_types: str = "clients,users"
     signed_entity_types: str = "trips,dispatch"
     r2_signed_url_expire_seconds: int = 3600
 

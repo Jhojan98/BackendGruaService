@@ -6,14 +6,30 @@
         "email": "admin@terra.local",
         "full_name": "Terra Admin",
         "role": "admin",
-        "password": "admin123"
+        "password": "admin123",
+        "profile_image_url": "https://cdn.terra.local/profiles/u-admin-1.jpg",
+        "theme": "light",
+        "language": "es",
+        "email_alerts": true,
+        "sms_urgent_alerts": true,
+        "browser_notifications": true,
+        "employee_id": "EMP-0001",
+        "office_location": "HQ - Lima"
       },
       {
         "id": "u-dispatch-1",
         "email": "dispatcher@terra.local",
         "full_name": "Dispatch Operator",
         "role": "dispatcher",
-        "password": "dispatch123"
+        "password": "dispatch123",
+        "profile_image_url": "https://cdn.terra.local/profiles/u-dispatch-1.jpg",
+        "theme": "light",
+        "language": "es",
+        "email_alerts": true,
+        "sms_urgent_alerts": true,
+        "browser_notifications": true,
+        "employee_id": "EMP-0002",
+        "office_location": "Operations Center"
       }
     ]
   },
@@ -66,14 +82,50 @@
       {
         "id": "c1",
         "name": "Aria Montgomery",
-        "membership": "Premium",
-        "phone": "(503) 555-0123"
+        "phone": "(503) 555-0123",
+        "status": "active",
+        "contact_person": "Aria Montgomery",
+        "email": "aria.m@swiftlogistics.com",
+        "client_type": "corporate",
+        "logo_url": "https://picsum.photos/seed/c1logo/200/200",
+        "last_service_date": "2026-03-26"
       },
       {
         "id": "c2",
         "name": "Ezra Fitz",
-        "membership": "Standard",
-        "phone": "(503) 555-0456"
+        "phone": "(503) 555-0456",
+        "status": "inactive",
+        "contact_person": "Ezra Fitz",
+        "email": "ezra.f@northwestcargo.com",
+        "client_type": "individual",
+        "logo_url": "https://picsum.photos/seed/c2logo/200/200",
+        "last_service_date": "2026-01-14"
+      }
+    ],
+    "vehicles": [
+      {
+        "id": "cv-1",
+        "client_id": "c1",
+        "make": "Freightliner",
+        "model": "Cascadia",
+        "license_plate": "8ABC123",
+        "is_active": true
+      },
+      {
+        "id": "cv-2",
+        "client_id": "c1",
+        "make": "Peterbilt",
+        "model": "579",
+        "license_plate": "4XYZ980",
+        "is_active": true
+      },
+      {
+        "id": "cv-3",
+        "client_id": "c2",
+        "make": "Kenworth",
+        "model": "T680",
+        "license_plate": "9LMN552",
+        "is_active": false
       }
     ],
     "history": [
