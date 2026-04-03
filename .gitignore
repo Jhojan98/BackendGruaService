@@ -9,7 +9,10 @@ __pycache__/
 .venv/
 venv/
 env/
+
+
 tests/
+pytest.ini
 # Environment files
 .env
 .env.*

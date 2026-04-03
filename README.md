@@ -9,6 +9,7 @@ This backend is a FastAPI microservices foundation for FrontendGruaService.
 - `services/dispatch-service` (port 8002): Trips lifecycle (list, create, status, assign).
 - `services/fleet-service` (port 8003): Fleet inventory, status, locations, WebSocket location stream.
 - `services/clients-service` (port 8004): Clients registry and client service history.
+- `services/media-service` (port 8005): Image uploads to Cloudflare R2 and metadata registry.
 - `postgres` (port 5432): Single PostgreSQL server with separate databases per service.
 
 ## Database Isolation
@@ -19,6 +20,7 @@ Databases are created by `infra/postgres/init/01-create-databases.sql`:
 - `dispatch_db`
 - `fleet_db`
 - `clients_db`
+- `media_db`
 
 Each service only reads/writes its own database.
 
@@ -44,6 +46,8 @@ Current table field definitions:
 - Clients DB (`services/clients-service/app/models.py`)
 	- `clients`: `id`, `name`, `membership`, `phone`
 	- `client_history`: `id`, `client_id`, `service_date`, `description`, `revenue`
+- Media DB (`services/media-service/app/models.py`)
+	- `media_assets`: `id`, `entity_type`, `entity_id`, `original_filename`, `mime_type`, `file_size_bytes`, `r2_key`, `url`, `access_mode`, `uploaded_by`, `created_at`, `updated_at`
 
 ## Single File for Initial Data
 
@@ -103,6 +107,9 @@ Implemented in gateway (`/api/v1`):
 - `GET /clients`
 - `POST /clients` (admin role required)
 - `GET /clients/{id}/history`
+- `POST /media/upload` (multipart image upload)
+- `GET /media/{id}`
+- `GET /media/by-entity?entity_type=...&entity_id=...`
 - `GET /analytics/revenue`
 - `GET /analytics/performance`
 
@@ -131,6 +138,29 @@ docker compose up --build
 - Dispatch service docs: `http://localhost:8002/docs`
 - Fleet service docs: `http://localhost:8003/docs`
 - Clients service docs: `http://localhost:8004/docs`
+- Media service docs: `http://localhost:8005/docs`
+
+## Testing
+
+Integration tests are available under `tests/` and target the running gateway (`http://localhost:8000` by default).
+
+Install test dependencies:
+
+```bash
+pip install -r tests/requirements-test.txt
+```
+
+Run all tests:
+
+```bash
+pytest
+```
+
+Optional custom gateway URL:
+
+```bash
+API_BASE_URL=http://localhost:8000 pytest
+```
 
 ## Seed Users
 

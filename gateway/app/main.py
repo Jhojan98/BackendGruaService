@@ -1,7 +1,7 @@
 from typing import Annotated, Any
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     dispatch_service_url: str = "http://dispatch-service:8002"
     fleet_service_url: str = "http://fleet-service:8003"
     clients_service_url: str = "http://clients-service:8004"
+    media_service_url: str = "http://media-service:8005"
     jwt_secret: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"
 
@@ -70,7 +71,39 @@ async def forward_json_request(
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.request(method=method, url=url, json=body, params=params)
         if response.status_code >= 400:
-            raise HTTPException(status_code=response.status_code, detail=response.json().get("detail", "Upstream error"))
+            detail: str = "Upstream error"
+            try:
+                payload = response.json()
+                if isinstance(payload, dict):
+                    detail = payload.get("detail", detail)
+                else:
+                    detail = str(payload)
+            except ValueError:
+                if response.text:
+                    detail = response.text
+            raise HTTPException(status_code=response.status_code, detail=detail)
+        return response.json()
+
+
+async def forward_multipart_request(
+    url: str,
+    files: dict[str, tuple[str, bytes, str]],
+    form_data: dict[str, Any] | None = None,
+) -> Any:
+    async with httpx.AsyncClient(timeout=30) as client:
+        response = await client.post(url=url, files=files, data=form_data)
+        if response.status_code >= 400:
+            detail: str = "Upstream error"
+            try:
+                payload = response.json()
+                if isinstance(payload, dict):
+                    detail = payload.get("detail", detail)
+                else:
+                    detail = str(payload)
+            except ValueError:
+                if response.text:
+                    detail = response.text
+            raise HTTPException(status_code=response.status_code, detail=detail)
         return response.json()
 
 
@@ -261,3 +294,56 @@ def analytics_performance(_: Annotated[dict[str, Any], Depends(current_user)]) -
         "fleetUtilization": 84.2,
         "jobCompletionRate": 96.8,
     }
+
+
+@app.post("/api/v1/media/upload", status_code=201)
+async def media_upload(
+    file: UploadFile = File(...),
+    entity_type: str = Form(...),
+    entity_id: str = Form(...),
+    access_mode: str | None = Form(default=None),
+    user: dict[str, Any] = Depends(current_user),
+) -> Any:
+    user_id = user.get("sub") if user else None
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+
+    content = await file.read()
+    files = {
+        "file": (
+            file.filename or "upload.bin",
+            content,
+            file.content_type or "application/octet-stream",
+        )
+    }
+    form_data = {
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "uploaded_by": user_id,
+    }
+    if access_mode:
+        form_data["access_mode"] = access_mode
+
+    return await forward_multipart_request(
+        url=f"{settings.media_service_url}/internal/media/upload",
+        files=files,
+        form_data=form_data,
+    )
+
+
+@app.get("/api/v1/media/by-entity")
+async def media_by_entity(
+    entity_type: str,
+    entity_id: str,
+    _: Annotated[dict[str, Any], Depends(current_user)],
+) -> Any:
+    return await forward_json_request(
+        "GET",
+        f"{settings.media_service_url}/internal/media/by-entity",
+        params={"entity_type": entity_type, "entity_id": entity_id},
+    )
+
+
+@app.get("/api/v1/media/{media_id}")
+async def media_get(media_id: str, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
+    return await forward_json_request("GET", f"{settings.media_service_url}/internal/media/{media_id}")
