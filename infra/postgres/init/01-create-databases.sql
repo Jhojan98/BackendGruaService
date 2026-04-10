@@ -3,3 +3,4 @@ CREATE DATABASE dispatch_db;
 CREATE DATABASE fleet_db;
 CREATE DATABASE clients_db;
 CREATE DATABASE media_db;
+CREATE DATABASE drivers_db;

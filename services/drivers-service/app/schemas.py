@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 DriverStatus = Literal["Available", "On Trip", "Off Duty"]
 DriverShift = Literal["Morning", "Evening", "Night", "Rotating"]
@@ -19,7 +19,7 @@ class DriverCreate(BaseModel):
     phone: str = Field(min_length=3, max_length=64)
     score: float = Field(default=4.5, ge=0, le=5)
     trips: int = Field(default=0, ge=0)
-    image_url: str | None = Field(default=None, max_length=1024)
+    image_url: str | None = Field(default=None, max_length=1024, validation_alias=AliasChoices("image_url", "image"))
 
     @field_validator("phone")
     @classmethod
@@ -41,7 +41,7 @@ class DriverUpdate(BaseModel):
     phone: str | None = Field(default=None, min_length=3, max_length=64)
     score: float | None = Field(default=None, ge=0, le=5)
     trips: int | None = Field(default=None, ge=0)
-    image_url: str | None = Field(default=None, max_length=1024)
+    image_url: str | None = Field(default=None, max_length=1024, validation_alias=AliasChoices("image_url", "image"))
 
     @field_validator("phone")
     @classmethod

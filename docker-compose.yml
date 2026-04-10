@@ -93,11 +93,27 @@ services:
       R2_PUBLIC_BASE_URL: ${R2_PUBLIC_BASE_URL:-}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-10}
       ALLOWED_IMAGE_MIME_TYPES: ${ALLOWED_IMAGE_MIME_TYPES:-image/jpeg,image/png,image/webp}
-      PUBLIC_ENTITY_TYPES: ${PUBLIC_ENTITY_TYPES:-clients,users}
+      PUBLIC_ENTITY_TYPES: ${PUBLIC_ENTITY_TYPES:-clients,users,drivers}
       SIGNED_ENTITY_TYPES: ${SIGNED_ENTITY_TYPES:-trips,dispatch}
       R2_SIGNED_URL_EXPIRE_SECONDS: ${R2_SIGNED_URL_EXPIRE_SECONDS:-3600}
     ports:
       - "8005:8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  drivers-service:
+    build: ./services/drivers-service
+    container_name: grua-drivers-service
+    env_file:
+      - .env
+    environment:
+      SERVICE_PORT: ${DRIVERS_SERVICE_PORT:-8006}
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@postgres:5432/drivers_db
+    ports:
+      - "8006:8006"
+    volumes:
+      - ./seed-data:/app/seed-data:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -114,6 +130,7 @@ services:
       FLEET_SERVICE_URL: http://fleet-service:8003
       CLIENTS_SERVICE_URL: http://clients-service:8004
       MEDIA_SERVICE_URL: http://media-service:8005
+      DRIVERS_SERVICE_URL: http://drivers-service:8006
     ports:
       - "8000:8000"
     depends_on:
@@ -122,6 +139,7 @@ services:
       - fleet-service
       - clients-service
       - media-service
+      - drivers-service
 
 volumes:
   postgres_data:
