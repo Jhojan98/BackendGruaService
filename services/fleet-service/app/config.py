@@ -6,6 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str
     seed_data_file: str = "/app/seed-data/initial_data.json"
+    clients_service_url: str = "http://clients-service:8004"
 
 
 settings = Settings()
