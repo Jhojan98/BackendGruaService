@@ -29,7 +29,9 @@ def seed_users(db: Session) -> None:
         return
 
     for seed_user in users:
-        existing = db.scalar(select(User).where(User.email == seed_user["email"]))
+        existing = db.get(User, seed_user["id"])
+        if not existing:
+            existing = db.scalar(select(User).where(User.email == seed_user["email"]))
         if not existing:
             existing = User(
                 id=seed_user["id"],
@@ -48,6 +50,7 @@ def seed_users(db: Session) -> None:
             )
             db.add(existing)
         else:
+            existing.email = seed_user["email"]
             existing.full_name = seed_user["full_name"]
             existing.role = seed_user["role"]
             existing.password_hash = pwd_context.hash(seed_user["password"])

@@ -20,7 +20,6 @@ class Settings(BaseSettings):
     fleet_service_url: str = "http://fleet-service:8003"
     clients_service_url: str = "http://clients-service:8004"
     media_service_url: str = "http://media-service:8005"
-    drivers_service_url: str = "http://drivers-service:8006"
     jwt_secret: str = "change-this-in-production"
     jwt_algorithm: str = "HS256"
 
@@ -51,6 +50,32 @@ class UpdateTripStatusBody(BaseModel):
 
 class AssignTripBody(BaseModel):
     towTruck: str
+
+
+class CreateFleetBody(BaseModel):
+    unitNumber: str = Field(min_length=1, max_length=64)
+    type: str = Field(min_length=1, max_length=64)
+    status: Literal["Available", "On Trip", "Maintenance"] = "Available"
+    lat: float = 0.0
+    lng: float = 0.0
+    image_url: str | None = Field(default=None, max_length=1024)
+
+
+class UpdateFleetBody(BaseModel):
+    unitNumber: str | None = Field(default=None, min_length=1, max_length=64)
+    type: str | None = Field(default=None, min_length=1, max_length=64)
+    status: Literal["Available", "On Trip", "Maintenance"] | None = None
+    lat: float | None = None
+    lng: float | None = None
+    image_url: str | None = Field(default=None, max_length=1024)
+
+
+class UpdateFleetStatusBody(BaseModel):
+    status: Literal["Available", "On Trip", "Maintenance"]
+
+
+class AssignFleetDriverBody(BaseModel):
+    driverId: str = Field(min_length=1, max_length=36)
 
 
 class CreateClientBody(BaseModel):
@@ -437,6 +462,45 @@ def _normalize_driver_image_fields(payload_data: dict[str, Any]) -> dict[str, An
     return normalized
 
 
+def _normalize_fleet_image_fields(payload_data: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload_data)
+    image_aliases = ["image", "imageUrl", "imageURL", "image_file", "imageFile"]
+    for alias in image_aliases:
+        value = normalized.pop(alias, None)
+        if value is not None and "image_url" not in normalized:
+            normalized["image_url"] = value
+    return normalized
+
+
+async def _build_fleet_payload_from_form(request: Request) -> tuple[dict[str, Any], UploadFile | None]:
+    form = await request.form()
+    raw_file = form.get("file") or form.get("image") or form.get("image_file") or form.get("imageFile")
+    file_value: UploadFile | None = None
+    if raw_file is not None and hasattr(raw_file, "read") and hasattr(raw_file, "filename"):
+        file_value = raw_file  # type: ignore[assignment]
+
+    payload_data: dict[str, Any] = {}
+    text_fields = ["unitNumber", "type", "status", "lat", "lng", "image_url", "image", "imageUrl"]
+    for key in text_fields:
+        value = _coerce_driver_field(form.get(key))
+        if value is not None:
+            payload_data[key] = value
+
+    if "lat" in payload_data:
+        try:
+            payload_data["lat"] = float(payload_data["lat"])
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="lat must be a number") from exc
+
+    if "lng" in payload_data:
+        try:
+            payload_data["lng"] = float(payload_data["lng"])
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="lng must be a number") from exc
+
+    return _normalize_fleet_image_fields(payload_data), file_value
+
+
 async def _build_driver_payload_from_form(request: Request) -> tuple[dict[str, Any], UploadFile | None]:
     form = await request.form()
     raw_file = (
@@ -580,7 +644,7 @@ def notifications(_: Annotated[dict[str, Any], Depends(current_user)]) -> dict:
 
 @app.get("/api/v1/dashboard/stats")
 async def dashboard_stats(_: Annotated[dict[str, Any], Depends(current_user)]) -> dict:
-    trips = await forward_json_request("GET", f"{settings.dispatch_service_url}/internal/trips")
+    trips = await forward_json_request("GET", f"{settings.fleet_service_url}/internal/trips")
     fleet = await forward_json_request("GET", f"{settings.fleet_service_url}/internal/fleet")
     active_dispatches = len([t for t in trips if t["status"] in ["Pending", "In Progress"]])
     available_units = len([f for f in fleet if f["status"] == "Available"])
@@ -614,12 +678,12 @@ async def list_trips(
         params["status"] = status_filter
     if date_filter:
         params["date"] = date_filter
-    return await forward_json_request("GET", f"{settings.dispatch_service_url}/internal/trips", params=params)
+    return await forward_json_request("GET", f"{settings.fleet_service_url}/internal/trips", params=params)
 
 
 @app.get("/api/v1/trips/{trip_id}")
 async def get_trip(trip_id: str, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
-    return await forward_json_request("GET", f"{settings.dispatch_service_url}/internal/trips/{trip_id}")
+    return await forward_json_request("GET", f"{settings.fleet_service_url}/internal/trips/{trip_id}")
 
 
 @app.post("/api/v1/trips")
@@ -636,7 +700,7 @@ async def create_trip(payload: CreateTripBody, _: Annotated[dict[str, Any], Depe
         "destination": destination,
         "distance": payload.distance,
     }
-    return await forward_json_request("POST", f"{settings.dispatch_service_url}/internal/trips", body=normalized)
+    return await forward_json_request("POST", f"{settings.fleet_service_url}/internal/trips", body=normalized)
 
 
 @app.put("/api/v1/trips/{trip_id}/status")
@@ -647,7 +711,7 @@ async def update_trip_status(
 ) -> Any:
     return await forward_json_request(
         "PUT",
-        f"{settings.dispatch_service_url}/internal/trips/{trip_id}/status",
+        f"{settings.fleet_service_url}/internal/trips/{trip_id}/status",
         body=payload.model_dump(),
     )
 
@@ -655,7 +719,7 @@ async def update_trip_status(
 @app.put("/api/v1/trips/{trip_id}/assign")
 async def assign_trip(trip_id: str, payload: AssignTripBody, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
     normalized = {"tow_truck": payload.towTruck}
-    return await forward_json_request("PUT", f"{settings.dispatch_service_url}/internal/trips/{trip_id}/assign", body=normalized)
+    return await forward_json_request("PUT", f"{settings.fleet_service_url}/internal/trips/{trip_id}/assign", body=normalized)
 
 
 @app.get("/api/v1/fleet")
@@ -671,6 +735,162 @@ async def fleet_locations(_: Annotated[dict[str, Any], Depends(current_user)]) -
 @app.get("/api/v1/fleet/{truck_id}")
 async def get_fleet_item(truck_id: str, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
     return await forward_json_request("GET", f"{settings.fleet_service_url}/internal/fleet/{truck_id}")
+
+
+@app.post("/api/v1/fleet", status_code=201)
+async def create_fleet_item(request: Request, user: Annotated[dict[str, Any], Depends(require_admin)]) -> Any:
+    admin_id = user.get("sub")
+    if not admin_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+
+    content_type = request.headers.get("content-type", "")
+    image_file: UploadFile | None = None
+    if "multipart/form-data" in content_type:
+        payload_data, image_file = await _build_fleet_payload_from_form(request)
+    else:
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid JSON body") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Request body must be an object")
+        payload_data = _normalize_fleet_image_fields(body)
+
+    try:
+        payload = CreateFleetBody(**payload_data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
+
+    created_truck = await forward_json_request(
+        "POST",
+        f"{settings.fleet_service_url}/internal/fleet",
+        body=payload.model_dump(),
+    )
+
+    if image_file is not None:
+        content = await image_file.read()
+        media_data = await forward_multipart_request(
+            url=f"{settings.media_service_url}/internal/media/upload",
+            files={
+                "file": (
+                    image_file.filename or f"fleet-truck-{uuid4().hex}.bin",
+                    content,
+                    image_file.content_type or "application/octet-stream",
+                )
+            },
+            form_data={
+                "entity_type": "trucks",
+                "entity_id": created_truck["id"],
+                "uploaded_by": admin_id,
+                "access_mode": "public",
+            },
+        )
+        created_truck = await forward_json_request(
+            "PATCH",
+            f"{settings.fleet_service_url}/internal/fleet/{created_truck['id']}",
+            body={"image_url": media_data.get("url")},
+        )
+
+    return created_truck
+
+
+@app.patch("/api/v1/fleet/{truck_id}")
+async def update_fleet_item(
+    truck_id: str,
+    request: Request,
+    user: Annotated[dict[str, Any], Depends(require_admin)],
+) -> Any:
+    admin_id = user.get("sub")
+    if not admin_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token subject")
+
+    content_type = request.headers.get("content-type", "")
+    image_file: UploadFile | None = None
+    if "multipart/form-data" in content_type:
+        payload_data, image_file = await _build_fleet_payload_from_form(request)
+    else:
+        try:
+            body = await request.json()
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid JSON body") from exc
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Request body must be an object")
+        payload_data = _normalize_fleet_image_fields(body)
+
+    try:
+        payload = UpdateFleetBody(**payload_data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()) from exc
+
+    update_payload = payload.model_dump(exclude_none=True)
+    if not update_payload and image_file is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No updatable fields provided")
+
+    truck_data: Any = None
+    if update_payload:
+        truck_data = await forward_json_request(
+            "PATCH",
+            f"{settings.fleet_service_url}/internal/fleet/{truck_id}",
+            body=update_payload,
+        )
+
+    if image_file is not None:
+        content = await image_file.read()
+        media_data = await forward_multipart_request(
+            url=f"{settings.media_service_url}/internal/media/upload",
+            files={
+                "file": (
+                    image_file.filename or f"fleet-truck-{uuid4().hex}.bin",
+                    content,
+                    image_file.content_type or "application/octet-stream",
+                )
+            },
+            form_data={
+                "entity_type": "trucks",
+                "entity_id": truck_id,
+                "uploaded_by": admin_id,
+                "access_mode": "public",
+            },
+        )
+        truck_data = await forward_json_request(
+            "PATCH",
+            f"{settings.fleet_service_url}/internal/fleet/{truck_id}",
+            body={"image_url": media_data.get("url")},
+        )
+
+    return truck_data
+
+
+@app.put("/api/v1/fleet/{truck_id}/status")
+async def update_fleet_item_status(
+    truck_id: str,
+    payload: UpdateFleetStatusBody,
+    _: Annotated[dict[str, Any], Depends(require_admin)],
+) -> Any:
+    return await forward_json_request(
+        "PUT",
+        f"{settings.fleet_service_url}/internal/fleet/{truck_id}/status",
+        body=payload.model_dump(),
+    )
+
+
+@app.put("/api/v1/fleet/{truck_id}/driver")
+async def assign_fleet_driver(
+    truck_id: str,
+    payload: AssignFleetDriverBody,
+    _: Annotated[dict[str, Any], Depends(require_admin)],
+) -> Any:
+    normalized = {"driver_id": payload.driverId}
+    return await forward_json_request(
+        "PUT",
+        f"{settings.fleet_service_url}/internal/fleet/{truck_id}/driver",
+        body=normalized,
+    )
+
+
+@app.delete("/api/v1/fleet/{truck_id}", status_code=204)
+async def delete_fleet_item(truck_id: str, _: Annotated[dict[str, Any], Depends(require_admin)]) -> None:
+    await forward_json_request("DELETE", f"{settings.fleet_service_url}/internal/fleet/{truck_id}")
 
 
 @app.get("/api/v1/drivers")
@@ -690,12 +910,12 @@ async def list_drivers(
         params["unit"] = unit_filter
     if search:
         params["search"] = search
-    return await forward_json_request("GET", f"{settings.drivers_service_url}/internal/drivers", params=params)
+    return await forward_json_request("GET", f"{settings.fleet_service_url}/internal/drivers", params=params)
 
 
 @app.get("/api/v1/drivers/{driver_id}")
 async def get_driver(driver_id: str, _: Annotated[dict[str, Any], Depends(current_user)]) -> Any:
-    return await forward_json_request("GET", f"{settings.drivers_service_url}/internal/drivers/{driver_id}")
+    return await forward_json_request("GET", f"{settings.fleet_service_url}/internal/drivers/{driver_id}")
 
 
 @app.post("/api/v1/drivers", status_code=201)
@@ -724,7 +944,7 @@ async def create_driver(request: Request, user: Annotated[dict[str, Any], Depend
 
     created_driver = await forward_json_request(
         "POST",
-        f"{settings.drivers_service_url}/internal/drivers",
+        f"{settings.fleet_service_url}/internal/drivers",
         body=payload.model_dump(),
     )
 
@@ -748,7 +968,7 @@ async def create_driver(request: Request, user: Annotated[dict[str, Any], Depend
         )
         created_driver = await forward_json_request(
             "PATCH",
-            f"{settings.drivers_service_url}/internal/drivers/{created_driver['id']}",
+            f"{settings.fleet_service_url}/internal/drivers/{created_driver['id']}",
             body={"image_url": media_data.get("url")},
         )
 
@@ -791,7 +1011,7 @@ async def update_driver(
     if update_payload:
         driver_data = await forward_json_request(
             "PATCH",
-            f"{settings.drivers_service_url}/internal/drivers/{driver_id}",
+            f"{settings.fleet_service_url}/internal/drivers/{driver_id}",
             body=update_payload,
         )
 
@@ -815,11 +1035,16 @@ async def update_driver(
         )
         driver_data = await forward_json_request(
             "PATCH",
-            f"{settings.drivers_service_url}/internal/drivers/{driver_id}",
+            f"{settings.fleet_service_url}/internal/drivers/{driver_id}",
             body={"image_url": media_data.get("url")},
         )
 
     return driver_data
+
+
+@app.delete("/api/v1/drivers/{driver_id}", status_code=204)
+async def delete_driver(driver_id: str, _: Annotated[dict[str, Any], Depends(require_admin)]) -> None:
+    await forward_json_request("DELETE", f"{settings.fleet_service_url}/internal/drivers/{driver_id}")
 
 
 @app.get("/api/v1/clients")
